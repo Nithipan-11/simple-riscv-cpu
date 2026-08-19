@@ -34,12 +34,16 @@ The structure here follows that flow:
 
 - `alu.v` — arithmetic/logic unit; one 4-bit control value chooses the operation.
 - `regfile.v` — 32 x 32-bit register file; x0 is hardwired to zero.
-- `imem.v` — reads `program.hex` with `$readmemh`.
+- `imem.v` — reads a hex program with `$readmemh`. Which file it loads is set by the `IMEM_FILE` parameter (default `"program.hex"`) — see [Simulating with Icarus Verilog](#simulating-with-icarus-verilog) below.
 - `dmem.v` — word-addressable memory used by `lw` and `sw`.
 - `control.v` — opcode/funct3/funct7 decoder that drives control signals.
-- `cpu.v` — the main datapath and PC update logic.
-- `tb_cpu.v` — testbench with a 10 ns clock and register trace output.
+- `cpu.v` — the main datapath and PC update logic; forwards `IMEM_FILE` down to `imem.v`.
+- `tb_cpu.v` — testbench with a 10 ns clock and register trace output for the sample program below.
 - `program.hex` — simple sample program.
+- `tb_nba.v` — testbench for the NBA Finals stats demo.
+- `program_nba.hex` — machine code for the NBA Finals stats demo.
+- `nba_finals_g5.asm` — the assembly source for that demo.
+- `asm.py` — a small two-pass assembler for turning `.asm` files like the one above into hex machine code.
 
 ## Sample program
 
@@ -66,6 +70,10 @@ The intended result is:
 
 ## Simulating with Icarus Verilog
 
+Both demos below share the same `cpu.v` and `imem.v`. Which hex file gets loaded is controlled by the `IMEM_FILE` parameter on the `cpu` module (it defaults to `"program.hex"`), so `tb_cpu.v` and `tb_nba.v` can each point at their own program without renaming files or touching `imem.v`.
+
+### Demo 1: register/memory sample program (`tb_cpu.v` / `program.hex`)
+
 From a terminal, in the project folder:
 
 1. Compile:
@@ -81,10 +89,59 @@ cycle=2 pc=8 x1=5 x2=7 x3=0 x4=0 x5=0 x6=0 mem0=0
 cycle=3 pc=12 x1=5 x2=7 x3=12 x4=0 x5=0 x6=0 mem0=0
 cycle=4 pc=16 x1=5 x2=7 x3=12 x4=0 x5=0 x6=0 mem0=12
 cycle=5 pc=20 x1=5 x2=7 x3=12 x4=12 x5=0 x6=0 mem0=12
-cycle=6 pc=28 x1=5 x2=7 x3=12 x4=12 x5=0 x6=42 mem0=12
+cycle=6 pc=28 x1=5 x2=7 x3=12 x4=12 x5=0 x6=0 mem0=12
+cycle=7 pc=32 x1=5 x2=7 x3=12 x4=12 x5=0 x6=42 mem0=12
 ```
 
+Note the branch at pc=20 (`beq x1, x1, 8`) jumps straight from pc=20 to pc=28, skipping the `addi x5, x0, 99` instruction at pc=24 — that's why x5 stays 0. Because register writes are synchronous, a value written by the instruction at a given pc shows up in the trace one cycle after that pc is fetched (e.g. x6 is written by the instruction at pc=28, so it reads 42 starting at cycle=7, not cycle=6).
+
 The exact cycle count may vary a little depending on how long the simulation runs, but the final register values should match the expected results above.
+
+### Demo 2: NBA Finals Game 5 stats demo (`tb_nba.v` / `program_nba.hex`)
+
+This demo loads real point totals from the box score of NBA Finals 2026 Game 5 (Knicks 94, Spurs 90) as constants for six players, then uses the CPU's own ALU and branch logic to compute:
+
+- the sum of those six players' points (a chain of `add` instructions), and
+- the game's top scorer (a chain of `slt`/`beq` comparisons that tracks a running max),
+
+storing both results to data memory with `sw` along the way. See `nba_finals_g5.asm` for the commented source.
+
+1. Compile:
+   `iverilog -g2012 -o sim_nba tb_nba.v cpu.v control.v alu.v regfile.v imem.v dmem.v`
+2. Run:
+   `vvp sim_nba`
+
+Expected output:
+
+```text
+---- final state ----
+x1 (Brunson)     = 45
+x2 (Harper)      = 25
+x3 (Wembanyama)  = 19
+x4 (Bridges)     = 14
+x5 (Champagnie)  = 14
+x6 (Hart)        = 13
+x7 (max scorer)  = 45  (expect 45)
+x8 (sum of six)  = 130  (expect 130)
+mem[6] (sum)     = 130  (expect 130)
+mem[7] (max)     = 45  (expect 45)
+```
+
+## Writing your own programs with asm.py
+
+`asm.py` is a small two-pass assembler for the instruction subset this CPU supports (see the top of this README). It lets you write labeled assembly instead of hand-encoding hex, resolving `label:` targets for `beq`/`bne` in a first pass and emitting one machine code word per instruction in a second pass. `nba_finals_g5.asm` is an example source file.
+
+Run it with a `.asm` file and it prints one annotated line per instruction to stdout:
+
+```
+python3 asm.py nba_finals_g5.asm
+```
+
+Each line looks like `02d00093   # pc=  0  addi x1, x0, 45`. Since `$readmemh` doesn't understand the trailing `#` comment, strip everything after the hex word before saving it as a `.hex` file that `imem.v` can load, e.g.:
+
+```
+python3 asm.py nba_finals_g5.asm | awk '{print $1}' > program_nba.hex
+```
 
 ## Suggested next steps
 
@@ -92,9 +149,9 @@ This project is intentionally simple so students can see the basic structure of 
 
 - Add more RV32I instructions such as lui, auipc, jal, jalr, and bltu.
 - Support byte and half-word memory access.
-- Add a simple assembler so you can write assembly instead of raw hex.
+- Extend `asm.py` with pseudo-instructions (li, mv, ...) and more directives.
 - Explore pipelining to improve performance.
-- Synthesize the design for an FPGA board.
+- Synthesize the design for an FPGA board (this project has only been simulated with Icarus Verilog so far).
 
 ## Why this design matters
 
