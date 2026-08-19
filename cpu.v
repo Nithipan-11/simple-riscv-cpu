@@ -18,7 +18,9 @@
 // In this simple learning design, the CPU updates all of these combinationally
 // between clock edges. There is no pipeline or multi-cycle behavior.
 
-module cpu (
+module cpu #(
+    parameter IMEM_FILE = "program.hex"
+) (
     input  wire        clk,
     input  wire        reset,
     output wire [31:0] pc_out
@@ -50,7 +52,9 @@ module cpu (
     // Instruction fetch
     // ==========================
     wire [31:0] instr;
-    imem u_imem (
+    imem #(
+        .IMEM_FILE(IMEM_FILE)
+    ) u_imem (
         .addr(pc),
         .instr(instr)
     );

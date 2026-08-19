@@ -8,7 +8,9 @@
 // is indexed by words using addr[31:2]. This matches the RISC-V convention where a
 // word is 4 bytes and the program counter is word-aligned.
 
-module imem (
+module imem #(
+    parameter IMEM_FILE = "program.hex"
+) (
     input  wire [31:0] addr,
     output wire [31:0] instr
 );
@@ -18,7 +20,7 @@ module imem (
 
     initial begin
         // Load the assembly/program machine code from the file in the same folder.
-        $readmemh("program.hex", mem);
+        $readmemh(IMEM_FILE, mem);
     end
 
     // The CPU sends a byte address, but each entry here is a full 32-bit instruction.
