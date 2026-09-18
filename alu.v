@@ -6,9 +6,7 @@
 //  - alu_ctrl picks which operation to do,
 //  - result gives the output of the operation.
 //
-// For beginners, think of the ALU as the part of the CPU that actually
-// does arithmetic, logic, and comparisons. It is the "calculator" of the
-// processor.
+
 
 module alu (
     input  wire [31:0] a,
